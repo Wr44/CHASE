@@ -17,6 +17,8 @@ function gillespie(
 )
     t = 0.0
     tau = 0.1
+    iter = 0
+
     snapshots = Vector{Tuple{Float64, Int, Int, Int, Int}}()
 
     cache = init_rates(bacterias, phages, division_rate, death_rate, K, phage_decay, infection_rate)
@@ -32,60 +34,41 @@ function gillespie(
 
         if min(num_bacteria, num_phage) < θ
 
-            all_rates = vcat(
-                [(:division, k, v) for (k, v) in cache.division],
-                [(:death, k, v) for (k, v) in cache.death],
-                [(:phage_decay, k, v) for (k, v) in cache.phage_decay],
-                [(:infection_failed, k, v) for (k, v) in cache.infection_failed],
-                [(:infection_succeeded, k, v) for (k, v) in cache.infection_succeeded]
-            )
-
-            probas = cumsum([x[3] / cache.lambda for x in all_rates])
             tau = rand(Exponential(1.0 / cache.lambda))
-            r = rand()
+            (event_type, event_data) = sample_event(cache)
 
-            for i in eachindex(probas)
-                if r < probas[i]
-                    event_type = all_rates[i][1]
-                    event_data = all_rates[i][2]
+            if event_type == :division
+                apply_division!(bacterias, event_data)
+                update_rates!(cache, bacterias, phages, division_rate, death_rate, K, phage_decay, infection_rate, :division, event_data)
 
-                    if event_type == :division
-                        apply_division!(bacterias, event_data)
-                        update_rates!(cache, bacterias, phages, division_rate, death_rate, K, phage_decay, infection_rate, :division, event_data)
+            elseif event_type == :death
+                apply_death!(bacterias, event_data)
+                update_rates!(cache, bacterias, phages, division_rate, death_rate, K, phage_decay, infection_rate, :death, event_data)
 
-                    elseif event_type == :death
-                        apply_death!(bacterias, event_data)
-                        update_rates!(cache, bacterias, phages, division_rate, death_rate, K, phage_decay, infection_rate, :death, event_data)
+            elseif event_type == :phage_decay
+                apply_phage_decay!(phages, event_data)
+                update_rates!(cache, bacterias, phages, division_rate, death_rate, K, phage_decay, infection_rate, :phage_decay, event_data)
 
-                    elseif event_type == :phage_decay
-                        apply_phage_decay!(phages, event_data)
-                        update_rates!(cache, bacterias, phages, division_rate, death_rate, K, phage_decay, infection_rate, :phage_decay, event_data)
+            elseif event_type == :infection_failed
+                spacers, phage_id = event_data
+                apply_infection_failed!(bacterias, phages, spacers, phage_id, new_spacer_chance)
+                update_rates!(cache, bacterias, phages, division_rate, death_rate, K, phage_decay, infection_rate, :phage_decay, phage_id)
 
-                    elseif event_type == :infection_failed
-                        spacers, phage_id = event_data
-                        apply_infection_failed!(bacterias, phages, spacers, phage_id, new_spacer_chance)
-                        update_rates!(cache, bacterias, phages, division_rate, death_rate, K, phage_decay, infection_rate, :phage_decay, phage_id)
+            elseif event_type == :infection_succeeded
+                spacers, phage_id = event_data
+                old_bac_keys = Set(keys(bacterias))
+                old_phage_keys = Set(keys(phages))
 
-                    elseif event_type == :infection_succeeded
-                        spacers, phage_id = event_data
-                        old_bac_keys = Set(keys(bacterias))
-                        old_phage_keys = Set(keys(phages))
+                apply_infection_succeeded!(bacterias, phages, spacers, phage_id, burst_size, mutation_chance, new_spacer_chance)
 
-                        apply_infection_succeeded!(bacterias, phages, spacers, phage_id, burst_size, mutation_chance, new_spacer_chance)
+                update_rates!(cache, bacterias, phages, division_rate, death_rate, K, phage_decay, infection_rate, :death, spacers)
+                update_rates!(cache, bacterias, phages, division_rate, death_rate, K, phage_decay, infection_rate, :phage_decay, phage_id)
 
-                        update_rates!(cache, bacterias, phages, division_rate, death_rate, K, phage_decay, infection_rate, :death, spacers)
-                        update_rates!(cache, bacterias, phages, division_rate, death_rate, K, phage_decay, infection_rate, :phage_decay, phage_id)
-
-                        for new_spacers in setdiff(keys(bacterias), old_bac_keys)
-                            update_rates!(cache, bacterias, phages, division_rate, death_rate, K, phage_decay, infection_rate, :new_clone, new_spacers)
-                        end
-
-                        for new_phage_id in setdiff(keys(phages), old_phage_keys)
-                            update_rates!(cache, bacterias, phages, division_rate, death_rate, K, phage_decay, infection_rate, :new_phage, new_phage_id)
-                        end
-                    end
-
-                    break
+                for new_spacers in setdiff(keys(bacterias), old_bac_keys)
+                    update_rates!(cache, bacterias, phages, division_rate, death_rate, K, phage_decay, infection_rate, :new_clone, new_spacers)
+                end
+                for new_phage_id in setdiff(keys(phages), old_phage_keys)
+                    update_rates!(cache, bacterias, phages, division_rate, death_rate, K, phage_decay, infection_rate, :new_phage, new_phage_id)
                 end
             end
 
@@ -95,59 +78,109 @@ function gillespie(
             tau_max = ε_loop / division_rate
             tau = min(tau_calc, tau_max)
 
-            all_rates = vcat(
-                [(:division, k, v) for (k, v) in cache.division],
-                [(:death, k, v) for (k, v) in cache.death],
-                [(:phage_decay, k, v) for (k, v) in cache.phage_decay],
-                [(:infection_failed, k, v) for (k, v) in cache.infection_failed],
-                [(:infection_succeeded, k, v) for (k, v) in cache.infection_succeeded]
-            )
+            modified_clones = Set{Set{Int}}()
+            modified_phages = Set{Int}()
+            new_clones = Set{Set{Int}}()
+            new_phages = Set{Int}()
 
-            rates_with_k = map(r -> (r[1], r[2], rand(Poisson(r[3] * tau))), all_rates)
+            div_events = [(k, rand(Poisson(v * tau))) for (k, v) in cache.division]
+            dth_events = [(k, rand(Poisson(v * tau))) for (k, v) in cache.death]
+            dec_events = [(k, rand(Poisson(v * tau))) for (k, v) in cache.phage_decay]
+            inf_f_events = [(k, rand(Poisson(v * tau))) for (k, v) in cache.infection_failed]
+            inf_s_events = [(k, rand(Poisson(v * tau))) for (k, v) in cache.infection_succeeded]
 
-            for (type, args, k) in rates_with_k
+            for (bac_id, k) in div_events
                 for _ in 1:k
-                    if type == :death
-                        if !haskey(bacterias, args) || bacterias[args] <= 0
-                            break
-                        end
-                        apply_death!(bacterias, args)
-
-                    elseif type == :division
-                        if !haskey(bacterias, args) || bacterias[args] <= 0
-                            break
-                        end
-                        apply_division!(bacterias, args)
-
-                    elseif type == :phage_decay
-                        if !haskey(phages, args) || phages[args] <= 0
-                            break
-                        end
-                        apply_phage_decay!(phages, args)
-
-                    elseif type == :infection_failed
-                        bac_id, phage_id = args
-                        if !haskey(bacterias, bac_id) || bacterias[bac_id] <= 0 ||
-                           !haskey(phages, phage_id) || phages[phage_id] <= 0
-                            break
-                        end
-                        apply_infection_failed!(bacterias, phages, bac_id, phage_id, new_spacer_chance)
-
-                    elseif type == :infection_succeeded
-                        bac_id, phage_id = args
-                        if !haskey(bacterias, bac_id) || bacterias[bac_id] <= 0 ||
-                           !haskey(phages, phage_id) || phages[phage_id] <= 0
-                            break
-                        end
-                        apply_infection_succeeded!(bacterias, phages, bac_id, phage_id, burst_size, mutation_chance, new_spacer_chance)
+                    if !haskey(bacterias, bac_id) || bacterias[bac_id] <= 0
+                        break
                     end
+                    apply_division!(bacterias, bac_id)
+                    push!(modified_clones, bac_id)
                 end
             end
 
-            cache = init_rates(bacterias, phages, division_rate, death_rate, K, phage_decay, infection_rate)
+            for (bac_id, k) in dth_events
+                for _ in 1:k
+                    if !haskey(bacterias, bac_id) || bacterias[bac_id] <= 0
+                        break
+                    end
+                    apply_death!(bacterias, bac_id)
+                    push!(modified_clones, bac_id)
+                end
+            end
+
+            for (ph_id, k) in dec_events
+                for _ in 1:k
+                    if !haskey(phages, ph_id) || phages[ph_id] <= 0
+                        break
+                    end
+                    apply_phage_decay!(phages, ph_id)
+                    push!(modified_phages, ph_id)
+                end
+            end
+
+            for ((bac_id, phage_id), k) in inf_f_events
+                for _ in 1:k
+                    if !haskey(bacterias, bac_id) || bacterias[bac_id] <= 0 ||
+                       !haskey(phages, phage_id) || phages[phage_id] <= 0
+                        break
+                    end
+                    apply_infection_failed!(bacterias, phages, bac_id, phage_id, new_spacer_chance)
+                    push!(modified_phages, phage_id)
+                end
+            end
+
+            for ((bac_id, phage_id), k) in inf_s_events
+                for _ in 1:k
+                    if !haskey(bacterias, bac_id) || bacterias[bac_id] <= 0 ||
+                       !haskey(phages, phage_id) || phages[phage_id] <= 0
+                        break
+                    end
+
+                    old_bac_keys = Set(keys(bacterias))
+                    old_phage_keys = Set(keys(phages))
+
+                    apply_infection_succeeded!(bacterias, phages, bac_id, phage_id, burst_size, mutation_chance, new_spacer_chance)
+
+                    for new_spacers in setdiff(keys(bacterias), old_bac_keys)
+                        push!(new_clones, new_spacers)
+                    end
+                    for new_phage_id in setdiff(keys(phages), old_phage_keys)
+                        push!(new_phages, new_phage_id)
+                    end
+
+                    push!(modified_clones, bac_id)
+                    push!(modified_phages, phage_id)
+
+                end
+            end
+
+
+            for spacers in new_clones
+                update_rates!(cache, bacterias, phages, division_rate, death_rate, K, phage_decay, infection_rate, :new_clone, spacers)
+            end
+            for phage_id in new_phages
+                update_rates!(cache, bacterias, phages, division_rate, death_rate, K, phage_decay, infection_rate, :new_phage, phage_id)
+            end
+            for spacers in modified_clones
+                update_rates!(cache, bacterias, phages, division_rate, death_rate, K, phage_decay, infection_rate, :division, spacers)
+            end
+            for phage_id in modified_phages
+                update_rates!(cache, bacterias, phages, division_rate, death_rate, K, phage_decay, infection_rate, :phage_decay, phage_id)
+            end
+
         end
 
         t += tau
+
+        iter += 1
+        if iter % 1000 == 0
+            cache.lambda = sum(values(cache.division)) +
+                        sum(values(cache.death)) +
+                        sum(values(cache.phage_decay)) +
+                        sum(values(cache.infection_failed)) +
+                        sum(values(cache.infection_succeeded))
+        end
 
         push!(snapshots, (
             t,
@@ -156,7 +189,11 @@ function gillespie(
             length(bacterias),
             length(phages)
         ))
+
+
+
     end
 
     return snapshots
+
 end

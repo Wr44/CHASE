@@ -80,6 +80,15 @@ end
     @test cache2.lambda == 0.0
 end
 
+@testset "sample_event" begin
+    bacterias = Bacterias(Set([1]) => 100)
+    phages = Phages(42 => 20)
+    cache = init_rates(bacterias, phages, 0.1, 0.05, 10000, 0.001, 0.001)
+    (event_type, event_data) = sample_event(cache)
+    @test event_type in (:division, :death, :phage_decay, :infection_failed, :infection_succeeded)
+    @test event_data !== nothing
+end
+
 @testset "gillespie exact" begin
     bacterias = Bacterias(Set{Int}() => 10)
     phages = Phages(1 => 5)

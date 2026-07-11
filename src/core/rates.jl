@@ -187,3 +187,41 @@ function update_rates!(
         end
     end
 end
+
+function sample_event(cache::RatesCache)
+    r = rand() * cache.lambda
+    acc = 0.0
+
+    for (k, v) in cache.division
+        acc += v
+        if r < acc
+            return (:division, k)
+        end
+    end
+    for (k, v) in cache.death
+        acc += v
+        if r < acc
+            return (:death, k)
+        end
+    end
+    for (k, v) in cache.phage_decay
+        acc += v
+        if r < acc
+            return (:phage_decay, k)
+        end
+    end
+    for (k, v) in cache.infection_failed
+        acc += v
+        if r < acc
+            return (:infection_failed, k)
+        end
+    end
+    for (k, v) in cache.infection_succeeded
+        acc += v
+        if r < acc
+            return (:infection_succeeded, k)
+        end
+    end
+
+    return (:none, nothing)
+end
