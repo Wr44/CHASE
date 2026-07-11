@@ -19,6 +19,17 @@ function apply_death!(
     end 
 end 
 
+function apply_phage_decay!(
+    phages::Phages,
+    phage_id::Int
+)
+    if (phages[phage_id] == 1) 
+        delete!(phages, phage_id)
+    else 
+        phages[phage_id] -= 1 
+    end 
+end
+
 function apply_infection_succeeded!(
     bacterias::Bacterias,
     phages::Phages,
@@ -35,11 +46,7 @@ function apply_infection_succeeded!(
         else
             bacterias[new_spacers] = 1
         end
-        if phages[phage_id] == 1
-            delete!(phages, phage_id)
-        else
-            phages[phage_id] -= 1
-        end
+        apply_phage_decay!(phages, phage_id)
     else
         apply_death!(bacterias, spacers)
         d = Binomial(burst_size, mutation_chance)
@@ -62,9 +69,5 @@ function apply_infection_failed!(
     phage_id::Int,
     new_spacer_chance::Float64
 )
-    if phages[phage_id] == 1
-        delete!(phages, phage_id)
-    else
-        phages[phage_id] -= 1
-    end
+    apply_phage_decay!(phages, phage_id)
 end
