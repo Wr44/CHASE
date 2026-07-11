@@ -14,13 +14,13 @@ function calculate_rates(
 
         for (phage_id, phage_count) in phages
             if recognize(spacers, phage_id)
-                push!(v, (:infection_failed, (phage_id, spacers) , infection_rate*bacteria_count*phage_count))
+                push!(v, (:infection_failed, (spacers, phage_id) , infection_rate*bacteria_count*phage_count))
             else
-                push!(v, (:infection_succeded, (phage_id, spacers) , infection_rate*bacteria_count*phage_count))
+                push!(v, (:infection_succeded, (spacers, phage_id) , infection_rate*bacteria_count*phage_count))
             end    
         end
     end
 
-    lambda = sum(t -> t[3], v)
+    lambda = isempty(v) ? 0.0 : sum(t -> t[3], v)
     return (v, lambda)
 end

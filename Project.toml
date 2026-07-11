@@ -2,3 +2,11 @@ name = "CHASE"
 uuid = "a784af5c-4784-446f-ae0f-0a9dfeff98a8"
 version = "0.1.0"
 authors = ["Heta <est.fmapper@gmail.com>"]
+
+[deps]
+Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[compat]
+Distributions = "0.25.129"
+Test = "1.11.0"
