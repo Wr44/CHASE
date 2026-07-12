@@ -11,6 +11,7 @@ B = 100
 d = 0.02
 μ = 1e-6
 ε = 1e-4
+κ = 1e-5
 θ = 15
 ε_loop = 0.03
 
@@ -24,7 +25,7 @@ snapshots = gillespie(
     bacterias,
     phages,
     tmax,
-    β, δ, d, K, B, φ, μ, ε, θ, ε_loop
+    β, δ, κ, d, K, B, φ, μ, ε, θ, ε_loop
 )
 
 step_size = max(1, length(snapshots) ÷ 7000) 

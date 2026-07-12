@@ -6,6 +6,7 @@ function gillespie(
     t_max::Int,
     division_rate::Float64,
     death_rate::Float64,
+    spacer_loss_rate::Float64,
     phage_decay::Float64,
     K::Int,
     burst_size::Int,
@@ -21,7 +22,7 @@ function gillespie(
 
     snapshots = Vector{Tuple{Float64, Int, Int, Int, Int}}()
 
-    cache = init_rates(bacterias, phages, division_rate, death_rate, K, phage_decay, infection_rate)
+    cache = init_rates(bacterias, phages, division_rate, death_rate, K, phage_decay, infection_rate, spacer_loss_rate)
 
     while t < t_max
 
@@ -40,21 +41,30 @@ function gillespie(
             if event_type == :division
                 apply_division!(bacterias, event_data)
                 cache.N_B += 1
-                update_rates!(cache, bacterias, phages, division_rate, death_rate, K, phage_decay, infection_rate, :division, event_data)
+                update_rates!(cache, bacterias, phages, division_rate, death_rate, K, phage_decay, infection_rate, spacer_loss_rate, :division, event_data)
 
             elseif event_type == :death
                 apply_death!(bacterias, event_data)
                 cache.N_B -= 1
-                update_rates!(cache, bacterias, phages, division_rate, death_rate, K, phage_decay, infection_rate, :death, event_data)
+                update_rates!(cache, bacterias, phages, division_rate, death_rate, K, phage_decay, infection_rate, spacer_loss_rate, :death, event_data)
+
+            elseif event_type == :spacer_loss
+                spacers = event_data
+                old_bac_keys = Set(keys(bacterias))
+                apply_spacer_loss!(bacterias, spacers)
+                update_rates!(cache, bacterias, phages, division_rate, death_rate, K, phage_decay, infection_rate, spacer_loss_rate, :spacer_loss, spacers)
+                for new_spacers in setdiff(keys(bacterias), old_bac_keys)
+                    update_rates!(cache, bacterias, phages, division_rate, death_rate, K, phage_decay, infection_rate, spacer_loss_rate, :new_clone, new_spacers)
+                end
 
             elseif event_type == :phage_decay
                 apply_phage_decay!(phages, event_data)
-                update_rates!(cache, bacterias, phages, division_rate, death_rate, K, phage_decay, infection_rate, :phage_decay, event_data)
+                update_rates!(cache, bacterias, phages, division_rate, death_rate, K, phage_decay, infection_rate, spacer_loss_rate, :phage_decay, event_data)
 
             elseif event_type == :infection_failed
                 spacers, phage_id = event_data
                 apply_infection_failed!(bacterias, phages, spacers, phage_id, new_spacer_chance)
-                update_rates!(cache, bacterias, phages, division_rate, death_rate, K, phage_decay, infection_rate, :phage_decay, phage_id)
+                update_rates!(cache, bacterias, phages, division_rate, death_rate, K, phage_decay, infection_rate, spacer_loss_rate, :phage_decay, phage_id)
 
             elseif event_type == :infection_succeeded
                 spacers, phage_id = event_data
@@ -65,15 +75,15 @@ function gillespie(
 
                 cache.N_B -= 1
 
-                update_rates!(cache, bacterias, phages, division_rate, death_rate, K, phage_decay, infection_rate, :death, spacers)
-                update_rates!(cache, bacterias, phages, division_rate, death_rate, K, phage_decay, infection_rate, :phage_decay, phage_id)
+                update_rates!(cache, bacterias, phages, division_rate, death_rate, K, phage_decay, infection_rate, spacer_loss_rate, :death, spacers)
+                update_rates!(cache, bacterias, phages, division_rate, death_rate, K, phage_decay, infection_rate, spacer_loss_rate, :phage_decay, phage_id)
 
                 for new_spacers in setdiff(keys(bacterias), old_bac_keys)
                     cache.N_B += 1
-                    update_rates!(cache, bacterias, phages, division_rate, death_rate, K, phage_decay, infection_rate, :new_clone, new_spacers)
+                    update_rates!(cache, bacterias, phages, division_rate, death_rate, K, phage_decay, infection_rate, spacer_loss_rate, :new_clone, new_spacers)
                 end
                 for new_phage_id in setdiff(keys(phages), old_phage_keys)
-                    update_rates!(cache, bacterias, phages, division_rate, death_rate, K, phage_decay, infection_rate, :new_phage, new_phage_id)
+                    update_rates!(cache, bacterias, phages, division_rate, death_rate, K, phage_decay, infection_rate, spacer_loss_rate, :new_phage, new_phage_id)
                 end
             end
 
@@ -156,19 +166,34 @@ function gillespie(
                 end
             end
 
+            for (spacers, rate) in cache.spacer_loss
+                k = rand(Poisson(rate * tau))
+                old_bac_keys = Set(keys(bacterias))
+                for _ in 1:k
+                    if !haskey(bacterias, spacers) || bacterias[spacers] <= 0 || isempty(spacers)
+                        break
+                    end
+                    apply_spacer_loss!(bacterias, spacers)
+                    push!(modified_clones, spacers)
+                end
+                for new_spacers in setdiff(keys(bacterias), old_bac_keys)
+                    push!(new_clones, new_spacers)
+                end
+            end
+
             cache.N_B = sum(values(bacterias))
 
             for spacers in new_clones
-                update_rates!(cache, bacterias, phages, division_rate, death_rate, K, phage_decay, infection_rate, :new_clone, spacers)
+                update_rates!(cache, bacterias, phages, division_rate, death_rate, K, phage_decay, infection_rate, spacer_loss_rate, :new_clone, spacers)
             end
             for phage_id in new_phages
-                update_rates!(cache, bacterias, phages, division_rate, death_rate, K, phage_decay, infection_rate, :new_phage, phage_id)
+                update_rates!(cache, bacterias, phages, division_rate, death_rate, K, phage_decay, infection_rate, spacer_loss_rate, :new_phage, phage_id)
             end
             for spacers in modified_clones
-                update_rates!(cache, bacterias, phages, division_rate, death_rate, K, phage_decay, infection_rate, :division, spacers)
+                update_rates!(cache, bacterias, phages, division_rate, death_rate, K, phage_decay, infection_rate, spacer_loss_rate, :division, spacers)
             end
             for phage_id in modified_phages
-                update_rates!(cache, bacterias, phages, division_rate, death_rate, K, phage_decay, infection_rate, :phage_decay, phage_id)
+                update_rates!(cache, bacterias, phages, division_rate, death_rate, K, phage_decay, infection_rate, spacer_loss_rate, :phage_decay, phage_id)
             end
 
         end
@@ -179,6 +204,7 @@ function gillespie(
         if iter % 1000 == 0
             cache.lambda = sum(values(cache.division)) +
                            sum(values(cache.death)) +
+                           sum(values(cache.spacer_loss)) +
                            sum(values(cache.phage_decay)) +
                            sum(values(cache.infection_failed)) +
                            sum(values(cache.infection_succeeded))

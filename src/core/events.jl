@@ -71,3 +71,27 @@ function apply_infection_failed!(
 )
     apply_phage_decay!(phages, phage_id)
 end
+
+
+function apply_spacer_loss!(
+    bacterias::Bacterias,
+    spacers::Set{Int}
+) 
+    new_spacers = copy(spacers)
+    removed = rand(spacers)
+
+    delete!(new_spacers, removed)
+
+    if haskey(bacterias, new_spacers) 
+        bacterias[new_spacers] += 1
+    else
+        bacterias[new_spacers] = 1
+    end
+
+    if (bacterias[spacers] == 1) 
+        delete!(bacterias, spacers)
+    else 
+        bacterias[spacers] -= 1 
+    end 
+
+end
