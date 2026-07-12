@@ -5,6 +5,7 @@ mutable struct RatesCache
     infection_failed :: Dict{Tuple{Set{Int}, Int}, Float64}
     infection_succeeded :: Dict{Tuple{Set{Int}, Int}, Float64}
     lambda :: Float64
+    N_B :: Int
 end 
 
 function init_rates(
@@ -17,16 +18,12 @@ function init_rates(
     infection_rate::Float64,
 )::RatesCache
 
-    rates = RatesCache(
-        Dict(),Dict(),Dict(),Dict(),Dict(),0.0
-    )
-
-    N_B = sum(values(bacterias)) 
+    rates = RatesCache(Dict(), Dict(), Dict(), Dict(), Dict(), 0.0, sum(values(bacterias)))
     
     for (spacers, bacteria_count) in bacterias
 
         rates.division[spacers] = division_rate * bacteria_count
-        rates.death[spacers] = (death_rate + N_B/K)* bacteria_count
+        rates.death[spacers] = (death_rate + rates.N_B/K)* bacteria_count
 
         for (phage_id, phage_count) in phages
             if recognize(spacers, phage_id)
@@ -62,11 +59,10 @@ function update_rates!(
     event_type::Symbol,
     event_data::Any
 )
-    N_B = sum(values(bacterias))
-
     if event_type == :division || event_type == :death
         spacers = event_data
-        n = get(bacterias, spacers, 0)
+
+        n = get(bacterias, spacers, 0)        
 
         if n == 0
             old_div = get(cache.division, spacers, 0.0)
@@ -85,7 +81,7 @@ function update_rates!(
             old_div = get(cache.division, spacers, 0.0)
             old_dth = get(cache.death, spacers, 0.0)
             new_div = division_rate * n
-            new_dth = (death_rate + N_B / K) * n
+            new_dth = (death_rate + cache.N_B / K) * n
             cache.division[spacers] = new_div
             cache.death[spacers] = new_dth
             cache.lambda += (new_div - old_div) + (new_dth - old_dth)
@@ -154,7 +150,7 @@ function update_rates!(
         spacers = event_data
         n = get(bacterias, spacers, 0)
         new_div = division_rate * n
-        new_dth = (death_rate + N_B / K) * n
+        new_dth = (death_rate + cache.N_B / K) * n
         cache.division[spacers] = new_div
         cache.death[spacers] = new_dth
         cache.lambda += new_div + new_dth

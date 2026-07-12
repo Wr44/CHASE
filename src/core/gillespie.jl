@@ -39,10 +39,12 @@ function gillespie(
 
             if event_type == :division
                 apply_division!(bacterias, event_data)
+                cache.N_B += 1
                 update_rates!(cache, bacterias, phages, division_rate, death_rate, K, phage_decay, infection_rate, :division, event_data)
 
             elseif event_type == :death
                 apply_death!(bacterias, event_data)
+                cache.N_B -= 1
                 update_rates!(cache, bacterias, phages, division_rate, death_rate, K, phage_decay, infection_rate, :death, event_data)
 
             elseif event_type == :phage_decay
@@ -61,10 +63,13 @@ function gillespie(
 
                 apply_infection_succeeded!(bacterias, phages, spacers, phage_id, burst_size, mutation_chance, new_spacer_chance)
 
+                cache.N_B -= 1
+
                 update_rates!(cache, bacterias, phages, division_rate, death_rate, K, phage_decay, infection_rate, :death, spacers)
                 update_rates!(cache, bacterias, phages, division_rate, death_rate, K, phage_decay, infection_rate, :phage_decay, phage_id)
 
                 for new_spacers in setdiff(keys(bacterias), old_bac_keys)
+                    cache.N_B += 1
                     update_rates!(cache, bacterias, phages, division_rate, death_rate, K, phage_decay, infection_rate, :new_clone, new_spacers)
                 end
                 for new_phage_id in setdiff(keys(phages), old_phage_keys)
@@ -83,13 +88,8 @@ function gillespie(
             new_clones = Set{Set{Int}}()
             new_phages = Set{Int}()
 
-            div_events = [(k, rand(Poisson(v * tau))) for (k, v) in cache.division]
-            dth_events = [(k, rand(Poisson(v * tau))) for (k, v) in cache.death]
-            dec_events = [(k, rand(Poisson(v * tau))) for (k, v) in cache.phage_decay]
-            inf_f_events = [(k, rand(Poisson(v * tau))) for (k, v) in cache.infection_failed]
-            inf_s_events = [(k, rand(Poisson(v * tau))) for (k, v) in cache.infection_succeeded]
-
-            for (bac_id, k) in div_events
+            for (bac_id, rate) in cache.division
+                k = rand(Poisson(rate * tau))
                 for _ in 1:k
                     if !haskey(bacterias, bac_id) || bacterias[bac_id] <= 0
                         break
@@ -99,7 +99,8 @@ function gillespie(
                 end
             end
 
-            for (bac_id, k) in dth_events
+            for (bac_id, rate) in cache.death
+                k = rand(Poisson(rate * tau))
                 for _ in 1:k
                     if !haskey(bacterias, bac_id) || bacterias[bac_id] <= 0
                         break
@@ -109,7 +110,8 @@ function gillespie(
                 end
             end
 
-            for (ph_id, k) in dec_events
+            for (ph_id, rate) in cache.phage_decay
+                k = rand(Poisson(rate * tau))
                 for _ in 1:k
                     if !haskey(phages, ph_id) || phages[ph_id] <= 0
                         break
@@ -119,7 +121,8 @@ function gillespie(
                 end
             end
 
-            for ((bac_id, phage_id), k) in inf_f_events
+            for ((bac_id, phage_id), rate) in cache.infection_failed
+                k = rand(Poisson(rate * tau))
                 for _ in 1:k
                     if !haskey(bacterias, bac_id) || bacterias[bac_id] <= 0 ||
                        !haskey(phages, phage_id) || phages[phage_id] <= 0
@@ -130,31 +133,30 @@ function gillespie(
                 end
             end
 
-            for ((bac_id, phage_id), k) in inf_s_events
+            for ((bac_id, phage_id), rate) in cache.infection_succeeded
+                k = rand(Poisson(rate * tau))
+                old_bac_keys = Set(keys(bacterias))
+                old_phage_keys = Set(keys(phages))
                 for _ in 1:k
                     if !haskey(bacterias, bac_id) || bacterias[bac_id] <= 0 ||
                        !haskey(phages, phage_id) || phages[phage_id] <= 0
                         break
                     end
-
-                    old_bac_keys = Set(keys(bacterias))
-                    old_phage_keys = Set(keys(phages))
-
                     apply_infection_succeeded!(bacterias, phages, bac_id, phage_id, burst_size, mutation_chance, new_spacer_chance)
-
                     for new_spacers in setdiff(keys(bacterias), old_bac_keys)
                         push!(new_clones, new_spacers)
                     end
                     for new_phage_id in setdiff(keys(phages), old_phage_keys)
                         push!(new_phages, new_phage_id)
                     end
-
                     push!(modified_clones, bac_id)
                     push!(modified_phages, phage_id)
-
+                    old_bac_keys = Set(keys(bacterias))
+                    old_phage_keys = Set(keys(phages))
                 end
             end
 
+            cache.N_B = sum(values(bacterias))
 
             for spacers in new_clones
                 update_rates!(cache, bacterias, phages, division_rate, death_rate, K, phage_decay, infection_rate, :new_clone, spacers)
@@ -176,10 +178,11 @@ function gillespie(
         iter += 1
         if iter % 1000 == 0
             cache.lambda = sum(values(cache.division)) +
-                        sum(values(cache.death)) +
-                        sum(values(cache.phage_decay)) +
-                        sum(values(cache.infection_failed)) +
-                        sum(values(cache.infection_succeeded))
+                           sum(values(cache.death)) +
+                           sum(values(cache.phage_decay)) +
+                           sum(values(cache.infection_failed)) +
+                           sum(values(cache.infection_succeeded))
+            cache.N_B = sum(values(bacterias))
         end
 
         push!(snapshots, (
@@ -189,8 +192,6 @@ function gillespie(
             length(bacterias),
             length(phages)
         ))
-
-
 
     end
 
