@@ -63,11 +63,8 @@ function apply_infection_succeeded!(
 end
 
 function apply_infection_failed!(
-    bacterias::Bacterias,
     phages::Phages,
-    spacers::Set{Int},
     phage_id::Int,
-    new_spacer_chance::Float64
 )
     apply_phage_decay!(phages, phage_id)
 end

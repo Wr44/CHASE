@@ -13,7 +13,7 @@ function gillespie(
     infection_rate::Float64,
     mutation_chance::Float64,
     new_spacer_chance::Float64,
-    θ::Int,
+    optimisation::Int,
     ε_loop::Float64
 )
     t = 0.0
@@ -33,7 +33,7 @@ function gillespie(
         num_bacteria = sum(values(bacterias))
         num_phage = sum(values(phages))
 
-        if min(num_bacteria, num_phage) < θ
+        if min(num_bacteria, num_phage) < optimisation
 
             tau = rand(Exponential(1.0 / cache.lambda))
             (event_type, event_data) = sample_event(cache)
@@ -63,7 +63,7 @@ function gillespie(
 
             elseif event_type == :infection_failed
                 spacers, phage_id = event_data
-                apply_infection_failed!(bacterias, phages, spacers, phage_id, new_spacer_chance)
+                apply_infection_failed!(phages, phage_id)
                 update_rates!(cache, bacterias, phages, division_rate, death_rate, K, phage_decay, infection_rate, spacer_loss_rate, :phage_decay, phage_id)
 
             elseif event_type == :infection_succeeded
@@ -138,7 +138,7 @@ function gillespie(
                        !haskey(phages, phage_id) || phages[phage_id] <= 0
                         break
                     end
-                    apply_infection_failed!(bacterias, phages, bac_id, phage_id, new_spacer_chance)
+                    apply_infection_failed!(phages, phage_id)
                     push!(modified_phages, phage_id)
                 end
             end
