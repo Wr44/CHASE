@@ -124,7 +124,7 @@ julia --project=. test/runtests.jl
 
 Je préfère développer le projet par couches plutôt que d'ajouter tout de suite beaucoup de mécanismes biologiques. L'idée est que chaque étape reste testable et compréhensible avant de passer à la suivante.
 
-### Couche 0 - Simulateur Gillespie ✅
+### Couche 0 - Simulateur Gillespie (fini)
 
 Cette partie correspond au moteur actuel.
 
@@ -134,7 +134,7 @@ Le modèle reste volontairement abstrait. La reconnaissance est encore binaire e
 
 Ce choix est assez proche des premiers modèles de dynamique de populations CRISPR-phage, qui cherchent d'abord à comprendre les grandes dynamiques de coexistence, de résistance et d'échappement avant de représenter toute la biologie moléculaire [3].
 
-### Couche 1 - Reconnaissance CRISPR basée sur les séquences 🔧
+### Couche 1 - Reconnaissance CRISPR basée sur les séquences 
 
 C'est la partie en cours.
 
@@ -148,7 +148,7 @@ Le but est donc surtout d'avoir un modèle intermédiaire : plus réaliste que l
 
 Le PAM pourra ensuite être ajouté explicitement.
 
-### Couche 2 - Inférence statistique 🔲
+### Couche 2 - Inférence statistique 
 
 Une fois le simulateur suffisamment stable, je veux essayer de l'utiliser dans l'autre sens.
 
@@ -162,7 +162,7 @@ Le principe sera de lancer beaucoup de simulations avec des paramètres différe
 
 Ce sera probablement la première partie du projet où le coût de calcul deviendra vraiment limitant.
 
-### Couche 3 - Surrogate model et simulation-based inference 🔲
+### Couche 3 - Surrogate model et simulation-based inference 
 
 Cette couche dépend directement de la précédente.
 
@@ -176,7 +176,7 @@ Les normalizing flows sont particulièrement intéressants pour approximer des d
 
 Je considère cette partie comme exploratoire : elle n'aura de sens qu'une fois le simulateur biologique suffisamment stable.
 
-### Couche 4 - Structure spatiale 🔲
+### Couche 4 - Structure spatiale 
 
 Le modèle actuel suppose un milieu parfaitement mélangé.
 
@@ -186,7 +186,7 @@ Cela permettra de regarder des phénomènes absents du modèle actuel : extincti
 
 Cette extension est directement motivée par la littérature sur la coexistence phage-bactérie en environnement spatial. Des modèles stochastiques ont montré que des refuges spatiaux peuvent stabiliser la coexistence [11], et des expériences plus récentes montrent que migration et structure spatiale peuvent maintenir plusieurs étapes successives de diversification [12].
 
-### Couche 5 - Séquences et données réelles 🔲
+### Couche 5 - Séquences et données réelles 
 
 Les séquences utilisées dans la Couche 1 resteront d'abord simplifiées.
 
@@ -200,7 +200,7 @@ Ce serait un bon premier cas pour comparer CHASE à autre chose qu'à ses propre
 
 L'objectif initial ne sera pas de reproduire chaque courbe expérimentale point par point. Je veux d'abord voir si le modèle retrouve les mêmes tendances générales : acquisition de résistance, échappement phagique, maintien ou perte de diversité et extinction éventuelle d'une des deux populations.
 
-### Couche 6 - Anti-CRISPR 🔲
+### Couche 6 - Anti-CRISPR 
 
 La dernière extension prévue pour l'instant concerne les protéines anti-CRISPR.
 
